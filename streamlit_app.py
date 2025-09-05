@@ -1,53 +1,49 @@
 import streamlit as st
-from openai import OpenAI
+import os
+from io import StringIO
 
-# Show title and description.
-st.title("📄 Document question answering")
-st.write(
-    "Upload a document below and ask a question about it – GPT will answer! "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-)
+# Simple RCA (Root Cause Analysis) App with Streamlit
+st.title("Simple Document Q&A - Root Cause Analysis")
+st.write("Upload a document and ask questions to identify root causes.")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+# File uploader
+uploaded_file = st.file_uploader("Choose a document", type=['txt', 'md'])
+
+if uploaded_file is not None:
+    # Read the uploaded file
+    stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
+    file_content = stringio.read()
+    
+    st.subheader("Document Content:")
+    st.text_area("Content", file_content, height=200, disabled=True)
+    
+    # Simple Q&A interface
+    st.subheader("Ask Questions:")
+    question = st.text_input("Enter your question about the document:")
+    
+    if question and st.button("Analyze"):
+        st.subheader("Analysis:")
+        
+        # Simple keyword-based analysis (placeholder for LangChain integration)
+        keywords = question.lower().split()
+        relevant_sentences = []
+        
+        for sentence in file_content.split('.'):
+            sentence = sentence.strip()
+            if sentence and any(keyword in sentence.lower() for keyword in keywords):
+                relevant_sentences.append(sentence)
+        
+        if relevant_sentences:
+            st.write("**Relevant information found:**")
+            for i, sentence in enumerate(relevant_sentences[:3], 1):
+                st.write(f"{i}. {sentence}...")
+        else:
+            st.write("No directly relevant information found in the document.")
+            st.write("Try asking about: causes, issues, problems, failures, or reasons.")
+
 else:
+    st.info("Please upload a document to begin analysis.")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
-
-    # Let the user upload a file via `st.file_uploader`.
-    uploaded_file = st.file_uploader(
-        "Upload a document (.txt or .md)", type=("txt", "md")
-    )
-
-    # Ask the user for a question via `st.text_area`.
-    question = st.text_area(
-        "Now ask a question about the document!",
-        placeholder="Can you give me a short summary?",
-        disabled=not uploaded_file,
-    )
-
-    if uploaded_file and question:
-
-        # Process the uploaded file and question.
-        document = uploaded_file.read().decode()
-        messages = [
-            {
-                "role": "user",
-                "content": f"Here's a document: {document} \n\n---\n\n {question}",
-            }
-        ]
-
-        # Generate an answer using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
-
-        # Stream the response to the app using `st.write_stream`.
-        st.write_stream(stream)
+# Footer
+st.markdown("---")
+st.markdown("*This is a minimal RCA application built with Streamlit.*")
