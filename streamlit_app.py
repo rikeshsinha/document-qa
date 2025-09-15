@@ -6,6 +6,8 @@ import numpy as np
 from typing import List, Dict
 import re
 
+openai_api_key = st.secrets["OPENAI_API_KEY"]
+
 # For RAG functionality - can be swapped with actual implementations
 try:
     import openai
