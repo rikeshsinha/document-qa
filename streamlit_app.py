@@ -3,7 +3,7 @@ import os
 from io import StringIO
 
 # Simple RCA (Root Cause Analysis) App with Streamlit
-st.title("Simple Document Q&A - Root Cause Analysis")
+st.title("Root Cause Analysis Agent")
 st.write("Upload a document and ask questions to identify root causes.")
 
 # File uploader
