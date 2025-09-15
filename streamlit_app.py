@@ -8,6 +8,13 @@ import re
 
 openai_api_key = st.secrets["OPENAI_API_KEY"]
 
+if "OPENAI_API_KEY" in st.secrets:
+    st.write("✅ OPENAI_API_KEY found in st.secrets")
+    # For security, do NOT print the raw key in production
+    st.write("First 5 characters:", st.secrets["OPENAI_API_KEY"][:5], "...")
+else:
+    st.write("❌ OPENAI_API_KEY NOT found in st.secrets")
+    
 # For RAG functionality - can be swapped with actual implementations
 try:
     import openai
