@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import json
-import openai
 from io import StringIO
 import numpy as np
 from typing import List, Dict
