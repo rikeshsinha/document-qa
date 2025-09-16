@@ -1,5 +1,5 @@
 import streamlit as st
-import os
+from streamlit.errors import StreamlitAPIException
 import json
 from io import StringIO
 import numpy as np
@@ -8,7 +8,14 @@ import re
 import faiss
 from sentence_transformers import SentenceTransformer
 
-st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+try:
+    st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+except StreamlitAPIException as exc:
+    # Streamlit enforces that `set_page_config` executes only once per app page.
+    # When the script reruns after a widget interaction, we simply ignore the
+    # benign "can only be called once" error while surfacing unexpected issues.
+    if "can only be called once" not in str(exc):
+        raise
 
 # Try to get OpenAI API key
 try:
@@ -19,9 +26,10 @@ except:
 try:
     import openai
     OPENAI_AVAILABLE = True
+    OPENAI_WARNING = None
 except ImportError:
     OPENAI_AVAILABLE = False
-    st.warning("OpenAI not installed. Using mock LLM responses.")
+    OPENAI_WARNING = "OpenAI not installed. Using mock LLM responses."
 
 # Initialize embedding model
 @st.cache_resource
@@ -168,6 +176,8 @@ if 'document_embeddings' not in st.session_state:
     st.session_state.document_embeddings = np.array([])
 if 'document_chunks' not in st.session_state:
     st.session_state.document_chunks = []
+if OPENAI_WARNING:
+    st.warning(OPENAI_WARNING)
 
 # === DOCUMENT UPLOAD SECTION ===
 st.header("📄 Knowledge Base Management")
@@ -181,7 +191,8 @@ with st.expander("Upload Documents", expanded=True):
     )
 
     if uploaded_files:
-        files_added = False
+        new_files_processed = []
+        skipped_files = []
 
         for uploaded_file in uploaded_files:
             file_id = uploaded_file.name
@@ -196,41 +207,48 @@ with st.expander("Upload Documents", expanded=True):
             # Chunk the document
             chunks = chunk_document(content)
 
-            if chunks:
-                with st.spinner(f"Processing {file_id}..."):
-                    # Embed chunks
-                    chunk_embeddings = embed_texts(chunks)
+            if not chunks:
+                skipped_files.append(file_id)
+                continue
 
-                    # Store document info
-                    st.session_state.knowledge_docs[file_id] = {
-                        'content': content,
-                        'chunk_count': len(chunks),
-                        'file_size': len(content)
-                    }
+            with st.spinner(f"Processing {file_id}..."):
+                # Embed chunks
+                chunk_embeddings = embed_texts(chunks)
 
-                    # Add to document chunks and embeddings
-                    for i, (chunk, embedding) in enumerate(zip(chunks, chunk_embeddings)):
-                        st.session_state.document_chunks.append({
-                            'doc_id': file_id,
-                            'chunk_id': f"{file_id}_chunk_{i}",
-                            'content': chunk
-                        })
+                # Store document info
+                st.session_state.knowledge_docs[file_id] = {
+                    'content': content,
+                    'chunk_count': len(chunks),
+                    'file_size': len(content)
+                }
 
-                    # Update embeddings array
-                    if st.session_state.document_embeddings.size == 0:
-                        st.session_state.document_embeddings = chunk_embeddings
-                    else:
-                        st.session_state.document_embeddings = np.vstack([
-                            st.session_state.document_embeddings,
-                            chunk_embeddings
-                        ])
+                # Add to document chunks and embeddings
+                for i, (chunk, embedding) in enumerate(zip(chunks, chunk_embeddings)):
+                    st.session_state.document_chunks.append({
+                        'doc_id': file_id,
+                        'chunk_id': f"{file_id}_chunk_{i}",
+                        'content': chunk
+                    })
 
-                st.success(f"✅ Processed {file_id}: {len(chunks)} chunks")
-                files_added = True
+                # Update embeddings array
+                if st.session_state.document_embeddings.size == 0:
+                    st.session_state.document_embeddings = chunk_embeddings
+                else:
+                    st.session_state.document_embeddings = np.vstack([
+                        st.session_state.document_embeddings,
+                        chunk_embeddings
+                    ])
 
-        if files_added:
-            st.session_state.pop("knowledge_uploader", None)
-            st.rerun()
+            new_files_processed.append(f"{file_id} ({len(chunks)} chunks)")
+
+        if not new_files_processed and not skipped_files:
+            st.info("Selected files have already been processed.")
+        elif new_files_processed:
+            st.success("Documents processed: " + ", ".join(new_files_processed))
+        if skipped_files:
+            st.warning(
+                "No sizeable text chunks detected in: " + ", ".join(skipped_files)
+            )
 
 # Display current knowledge base
 if st.session_state.knowledge_docs:
