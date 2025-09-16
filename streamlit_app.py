@@ -8,7 +8,11 @@ import re
 import faiss
 from sentence_transformers import SentenceTransformer
 
-st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+_PAGE_CONFIG_SENTINEL_ATTR = "_document_qa_page_config_set"
+
+if not getattr(st, _PAGE_CONFIG_SENTINEL_ATTR, False):
+    st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+    setattr(st, _PAGE_CONFIG_SENTINEL_ATTR, True)
 
 # Try to get OpenAI API key
 try:
