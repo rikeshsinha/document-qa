@@ -182,6 +182,7 @@ with st.expander("Upload Documents", expanded=True):
 
     if uploaded_files:
         files_added = False
+        newly_processed = []
 
         for uploaded_file in uploaded_files:
             file_id = uploaded_file.name
@@ -227,10 +228,13 @@ with st.expander("Upload Documents", expanded=True):
 
                 st.success(f"✅ Processed {file_id}: {len(chunks)} chunks")
                 files_added = True
+                newly_processed.append(file_id)
 
         if files_added:
-            st.session_state.pop("knowledge_uploader", None)
-            st.rerun()
+            # Clear uploader widget so previously processed files don't trigger duplicate processing
+            st.session_state["knowledge_uploader"] = []
+            if newly_processed:
+                st.info("Documents processed: " + ", ".join(newly_processed))
 
 # Display current knowledge base
 if st.session_state.knowledge_docs:
