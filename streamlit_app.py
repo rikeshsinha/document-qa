@@ -298,6 +298,12 @@ with st.sidebar:
         st.session_state.document_chunks = []
         st.success("Knowledge store cleared!")
         st.rerun()
+
+    if st.sidebar.button("Full Session RESET"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
+
     
     # Technical notes
     with st.expander("🔧 Technical Notes"):
