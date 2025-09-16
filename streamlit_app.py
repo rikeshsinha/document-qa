@@ -153,13 +153,14 @@ Format as JSON array with fields: hypothesis, likelihood, evidence, next_steps""
 
 # === STREAMLIT UI ===
 
+
+st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+st.title("📊 Document Q&A with Root Cause Analysis")
+
 if st.sidebar.button("Full Session RESET"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.experimental_rerun()
-
-st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
-st.title("📊 Document Q&A with Root Cause Analysis")
 
 # Initialize session state
 if 'knowledge_docs' not in st.session_state:
