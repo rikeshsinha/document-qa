@@ -8,6 +8,8 @@ import re
 import faiss
 from sentence_transformers import SentenceTransformer
 
+st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
+
 # Try to get OpenAI API key
 try:
     openai_api_key = st.secrets["OPENAI_API_KEY"]
@@ -152,9 +154,6 @@ Format as JSON array with fields: hypothesis, likelihood, evidence, next_steps""
     return mock_hypotheses
 
 # === STREAMLIT UI ===
-
-
-st.set_page_config(page_title="Document Q&A with RCA", page_icon="📊", layout="wide")
 st.title("📊 Document Q&A with Root Cause Analysis")
 
 if st.sidebar.button("Full Session RESET"):
