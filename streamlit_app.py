@@ -168,11 +168,24 @@ if 'document_embeddings' not in st.session_state:
     st.session_state.document_embeddings = np.array([])
 if 'document_chunks' not in st.session_state:
     st.session_state.document_chunks = []
+if 'reset_knowledge_uploader' not in st.session_state:
+    st.session_state.reset_knowledge_uploader = False
+if 'knowledge_upload_message' not in st.session_state:
+    st.session_state.knowledge_upload_message = ""
 
 # === DOCUMENT UPLOAD SECTION ===
 st.header("📄 Knowledge Base Management")
 
 with st.expander("Upload Documents", expanded=True):
+    if st.session_state.reset_knowledge_uploader:
+        if "knowledge_uploader" in st.session_state:
+            st.session_state["knowledge_uploader"] = []
+        st.session_state.reset_knowledge_uploader = False
+
+    if st.session_state.knowledge_upload_message:
+        st.success(st.session_state.knowledge_upload_message)
+        st.session_state.knowledge_upload_message = ""
+
     uploaded_files = st.file_uploader(
         "Choose files to add to knowledge base",
         accept_multiple_files=True,
@@ -182,6 +195,7 @@ with st.expander("Upload Documents", expanded=True):
 
     if uploaded_files:
         files_added = False
+        processed_details = []
 
         for uploaded_file in uploaded_files:
             file_id = uploaded_file.name
@@ -225,11 +239,14 @@ with st.expander("Upload Documents", expanded=True):
                             chunk_embeddings
                         ])
 
-                st.success(f"✅ Processed {file_id}: {len(chunks)} chunks")
                 files_added = True
+                processed_details.append(f"{file_id} ({len(chunks)} chunks)")
 
         if files_added:
-            st.session_state.pop("knowledge_uploader", None)
+            st.session_state.knowledge_upload_message = (
+                "Documents processed: " + ", ".join(processed_details)
+            )
+            st.session_state.reset_knowledge_uploader = True
             st.rerun()
 
 # Display current knowledge base
