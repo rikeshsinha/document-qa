@@ -176,35 +176,38 @@ with st.expander("Upload Documents", expanded=True):
     uploaded_files = st.file_uploader(
         "Choose files to add to knowledge base",
         accept_multiple_files=True,
-        type=['txt', 'md', 'py', 'json', 'csv']
+        type=['txt', 'md', 'py', 'json', 'csv'],
+        key="knowledge_uploader"
     )
-    
+
     if uploaded_files:
+        files_added = False
+
         for uploaded_file in uploaded_files:
             file_id = uploaded_file.name
-            
+
             # Skip if already processed
             if file_id in st.session_state.knowledge_docs:
                 continue
-            
+
             # Read and process file
             content = StringIO(uploaded_file.getvalue().decode("utf-8")).read()
-            
+
             # Chunk the document
             chunks = chunk_document(content)
-            
+
             if chunks:
                 with st.spinner(f"Processing {file_id}..."):
                     # Embed chunks
                     chunk_embeddings = embed_texts(chunks)
-                    
+
                     # Store document info
                     st.session_state.knowledge_docs[file_id] = {
                         'content': content,
                         'chunk_count': len(chunks),
                         'file_size': len(content)
                     }
-                    
+
                     # Add to document chunks and embeddings
                     for i, (chunk, embedding) in enumerate(zip(chunks, chunk_embeddings)):
                         st.session_state.document_chunks.append({
@@ -212,19 +215,22 @@ with st.expander("Upload Documents", expanded=True):
                             'chunk_id': f"{file_id}_chunk_{i}",
                             'content': chunk
                         })
-                    
+
                     # Update embeddings array
                     if st.session_state.document_embeddings.size == 0:
                         st.session_state.document_embeddings = chunk_embeddings
                     else:
                         st.session_state.document_embeddings = np.vstack([
-                            st.session_state.document_embeddings, 
+                            st.session_state.document_embeddings,
                             chunk_embeddings
                         ])
-                
+
                 st.success(f"✅ Processed {file_id}: {len(chunks)} chunks")
-        
-        st.rerun()
+                files_added = True
+
+        if files_added:
+            st.session_state.pop("knowledge_uploader", None)
+            st.rerun()
 
 # Display current knowledge base
 if st.session_state.knowledge_docs:
