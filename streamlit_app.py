@@ -160,7 +160,7 @@ st.title("📊 Document Q&A with Root Cause Analysis")
 if st.sidebar.button("Full Session RESET"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    st.experimental_rerun()
+    st.rerun()
 
 # Initialize session state
 if 'knowledge_docs' not in st.session_state:
