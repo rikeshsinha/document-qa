@@ -91,71 +91,117 @@ def chunk_document(content: str, chunk_size: int = 500) -> List[str]:
     
     return [chunk for chunk in chunks if len(chunk.strip()) > 50]  # Filter very short chunks
 
-def generate_hypotheses_with_llm(query: str, context_texts: List[str]) -> List[Dict]:
-    """Generate RCA hypotheses using LLM with retrieved context"""
+def generate_null_hypotheses_with_llm(query: str, context_texts: List[str]) -> List[Dict]:
+    """Generate statistically framed null hypotheses from context."""
     context_str = "\n\n".join([f"Context {i+1}: {text}" for i, text in enumerate(context_texts)])
-    
-    prompt = f"""Based on the following context and the RCA query, generate 3-5 potential root cause hypotheses.
 
-Query: {query}
+    prompt = f"""You are assisting with a data-driven root cause investigation. Based on the RCA question and retrieved context, craft 3-5 explicit null hypotheses.
 
-Relevant Context:
+RCA Question: {query}
+
+Context Chunks:
 {context_str}
 
-For each hypothesis, provide:
-1. A clear hypothesis statement
-2. Likelihood rating (High/Medium/Low)
-3. Supporting evidence from the context
-4. Next steps to validate the hypothesis
+Each null hypothesis must:
+- Be phrased as a formal null hypothesis (start with "There is no..." or "The rate/metric does not...").
+- Identify the metric or relationship that would be tested.
+- Reference the contextual evidence that motivated the hypothesis.
+- Suggest measurable signals that could help refute the null.
 
-Format as JSON array with fields: hypothesis, likelihood, evidence, next_steps"""
-    
+Return a JSON array. Each item should contain the keys: null_hypothesis, metric_to_test, context_rationale, refutation_signals."""
+
     if OPENAI_AVAILABLE and openai_api_key:
         try:
             client = openai.OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are an expert in root cause analysis. Provide structured hypotheses based on the given context."},
+                    {"role": "system", "content": "You are an expert data analyst who only returns well-formed JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7
+                temperature=0.2
             )
-            
-            # Try to parse JSON response
+
             try:
                 hypotheses = json.loads(response.choices[0].message.content)
                 if isinstance(hypotheses, list):
                     return hypotheses
             except json.JSONDecodeError:
                 pass
-                
+
         except Exception as e:
             st.error(f"OpenAI API error: {str(e)}")
-    
-    # Fallback: Mock hypotheses based on context keywords
+
+    # Fallback: Provide deterministic null hypotheses
     mock_hypotheses = [
         {
-            "hypothesis": "Process inefficiency or bottleneck",
-            "likelihood": "High",
-            "evidence": "Context suggests workflow or process-related issues",
-            "next_steps": "Analyze process metrics and identify bottlenecks"
+            "null_hypothesis": "There is no significant change in the primary performance metric compared to the previous comparable period.",
+            "metric_to_test": "Primary KPI trend over time",
+            "context_rationale": "Use baseline performance captured in the uploaded documents to compare across time windows.",
+            "refutation_signals": "Statistically significant deviation from historical average beyond expected variance."
         },
         {
-            "hypothesis": "Resource or capacity constraints",
-            "likelihood": "Medium",
-            "evidence": "Indicators of resource limitations in the context",
-            "next_steps": "Review resource allocation and capacity planning"
+            "null_hypothesis": "Operational throughput has not decreased across documented process steps.",
+            "metric_to_test": "Step-level throughput or cycle time",
+            "context_rationale": "Process documentation indicates stable throughput unless bottlenecks appear.",
+            "refutation_signals": "Observed increase in cycle time or queue length within any process stage."
         },
         {
-            "hypothesis": "System or technical failure",
-            "likelihood": "Medium",
-            "evidence": "Technical indicators present in the context",
-            "next_steps": "Investigate system logs and technical infrastructure"
+            "null_hypothesis": "There is no increase in incident frequency attributable to the referenced system components.",
+            "metric_to_test": "Incident rate by component",
+            "context_rationale": "System documentation implies consistent reliability for the components mentioned.",
+            "refutation_signals": "Spike in incidents correlated with specific components beyond historical baseline."
         }
     ]
-    
+
     return mock_hypotheses
+
+
+def generate_queries_from_null_hypotheses(null_hypotheses: List[Dict], knowledge_structure: Dict) -> List[str]:
+    """Generate investigative queries based on null hypotheses and document metadata."""
+    structure_json = json.dumps(knowledge_structure, indent=2)
+
+    prompt = f"""You are a query planning assistant. Given metadata about available documents and a list of null hypotheses, create targeted follow-up queries or analyses that would help test the hypotheses.
+
+Knowledge Base Structure:
+{structure_json}
+
+Null Hypotheses:
+{json.dumps(null_hypotheses, indent=2)}
+
+Provide 3-5 concise natural-language analytical queries. Focus on the metrics or relationships that could refute the null hypotheses. Respond as a JSON array of strings."""
+
+    if OPENAI_AVAILABLE and openai_api_key:
+        try:
+            client = openai.OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You generate actionable analytical queries and reply with JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3
+            )
+
+            try:
+                queries = json.loads(response.choices[0].message.content)
+                if isinstance(queries, list):
+                    return queries
+            except json.JSONDecodeError:
+                pass
+
+        except Exception as e:
+            st.error(f"OpenAI API error: {str(e)}")
+
+    # Fallback deterministic queries
+    fallback_queries = [
+        "Compare current-period KPI performance against the trailing 12-month baseline to detect significant deviations.",
+        "Review step-level throughput metrics to identify any process stages with increased cycle time.",
+        "Segment incident counts by system component to confirm whether any module shows abnormal spikes.",
+        "Analyze resource utilization logs to ensure capacity constraints have not emerged recently."
+    ]
+
+    return fallback_queries
 
 # === STREAMLIT UI ===
 st.title("📊 Document Q&A with Root Cause Analysis")
@@ -177,6 +223,9 @@ if 'document_chunks' not in st.session_state:
 st.header("📄 Knowledge Base Management")
 
 with st.expander("Upload Documents", expanded=True):
+    if st.session_state.pop("_reset_knowledge_uploader", False):
+        st.session_state.pop("knowledge_uploader", None)
+
     uploaded_files = st.file_uploader(
         "Choose files to add to knowledge base",
         accept_multiple_files=True,
@@ -236,7 +285,7 @@ with st.expander("Upload Documents", expanded=True):
 
         if files_added:
             # Clear uploader widget so previously processed files don't trigger duplicate processing
-            st.session_state["knowledge_uploader"] = []
+            st.session_state["_reset_knowledge_uploader"] = True
             if newly_processed:
                 st.info("Documents processed: " + ", ".join(newly_processed))
 
@@ -285,22 +334,48 @@ if st.session_state.knowledge_docs:
                     context_texts.append(chunk_info['content'])
                 
                 # === LLM GENERATION STEP ===
-                st.subheader("🎯 Generated RCA Hypotheses")
-                
-                # Generate hypotheses using LLM with retrieved context
-                hypotheses = generate_hypotheses_with_llm(rca_query, context_texts)
-                
-                # Display hypotheses in the same format as before
-                for i, hypothesis in enumerate(hypotheses, 1):
-                    with st.expander(f"Hypothesis {i}: {hypothesis['hypothesis']}"):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write(f"**Likelihood:** {hypothesis['likelihood']}")
-                            st.write(f"**Evidence:** {hypothesis['evidence']}")
-                        
-                        with col2:
-                            st.write(f"**Next Steps:** {hypothesis['next_steps']}")
+                st.subheader("🎯 Generated Null Hypotheses")
+
+                raw_null_hypotheses = generate_null_hypotheses_with_llm(rca_query, context_texts)
+                null_hypotheses = []
+
+                for hyp in raw_null_hypotheses:
+                    if isinstance(hyp, dict):
+                        null_hypotheses.append(hyp)
+                    elif isinstance(hyp, str):
+                        null_hypotheses.append({
+                            "null_hypothesis": hyp,
+                            "metric_to_test": "Not specified",
+                            "context_rationale": "LLM returned plain text; please refine manually.",
+                            "refutation_signals": "Define quantitative indicators that would disprove this statement."
+                        })
+
+                if not null_hypotheses:
+                    st.info("No null hypotheses could be generated from the provided context.")
+                    generated_queries = []
+                else:
+                    for i, hypothesis in enumerate(null_hypotheses, 1):
+                        title = hypothesis.get("null_hypothesis", f"Null Hypothesis {i}")
+                        with st.expander(f"Null Hypothesis {i}: {title}"):
+                            st.write(f"**Metric to Test:** {hypothesis.get('metric_to_test', 'Not specified')}")
+                            st.write(f"**Context Rationale:** {hypothesis.get('context_rationale', 'Not provided')}")
+                            st.write(f"**Signals that Would Refute the Null:** {hypothesis.get('refutation_signals', 'Not provided')}")
+
+                    # === QUERY GENERATOR AGENT ===
+                    knowledge_structure = {
+                        doc_id: {
+                            "chunk_count": doc_info.get("chunk_count"),
+                            "file_size": doc_info.get("file_size"),
+                        }
+                        for doc_id, doc_info in st.session_state.knowledge_docs.items()
+                    }
+
+                    generated_queries = generate_queries_from_null_hypotheses(null_hypotheses, knowledge_structure)
+
+                    if generated_queries:
+                        st.subheader("🧪 Follow-up Analytical Queries")
+                        for query_text in generated_queries:
+                            st.write(f"- {query_text}")
             else:
                 st.warning("No relevant context found in knowledge store. Try adding more documents or refining your query.")
 else:
